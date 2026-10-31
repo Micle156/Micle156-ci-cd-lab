@@ -25,8 +25,8 @@ jobs:
           docker run -d --name smoke -p 8080:80 site:test
           sleep 3
           curl -s http://localhost:8080 > page.html
-          grep -q "</html>" page.html
-          code=$?
+          code=0
+          grep -q "</html>" page.html || code=$?
           echo "grep exit code: $code"
           if [ $code -eq 0 ]; then
             echo "OK"
