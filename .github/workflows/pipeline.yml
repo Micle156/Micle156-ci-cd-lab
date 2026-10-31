@@ -1,0 +1,65 @@
+name: Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint HTML
+        continue-on-error: true
+        run: npx --yes htmlhint index.html
+
+      - name: Build image
+        run: docker build -t site:test .
+
+      - name: Smoke test container
+        run: |
+          docker run -d --name smoke -p 8080:80 site:test
+          sleep 3
+          curl -s http://localhost:8080 > page.html
+          grep -q "</html>" page.html
+          code=$?
+          echo "grep exit code: $code"
+          if [ $code -eq 0 ]; then
+            echo "OK"
+          else
+            echo "FAIL: page is broken"
+            exit 1
+          fi
+
+  release:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/micle156/micle156-ci-cd-lab:latest
+            ghcr.io/micle156/micle156-ci-cd-lab:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/Micle156/Micle156-ci-cd-lab
